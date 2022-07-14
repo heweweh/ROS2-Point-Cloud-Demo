@@ -13,8 +13,7 @@ from det3d.models import build_detector
 from det3d.torchie.parallel import MegDataParallel
 from det3d.torchie.trainer import load_checkpoint
 
-from torch.utils.data import DataLoader
-from det3d.datasets import build_dataset
+from det3d.datasets.pipelines import Compose
 from det3d.torchie.parallel import collate_kitti
 from det3d.torchie.trainer.trainer import example_to_device
 
@@ -27,6 +26,7 @@ class PCDListener(Node):
             'pcd_demo'), 'config', 'config.py')
         self.cfg = torchie.Config.fromfile(config_dir)
 
+        self.preprocess = Compose(self.cfg.online_execute_pipeline)
         checkpoint_path = os.path.join(get_package_share_directory(
             'pcd_demo'), 'checkpoint', 'se-ssd-model.pth')
         model_ = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
@@ -52,8 +52,23 @@ class PCDListener(Node):
         # https://github.com/ros/common_msgs/blob/noetic-devel/sensor_msgs/src/sensor_msgs/point_cloud2.py
 
         pcd_as_numpy_array = np.array(list(read_points(msg)))
+        res = {
+            "lidar": {
+                "type": "lidar",
+                "points": pcd_as_numpy_array,
+                "targets": None,      # include cls_labels & reg_targets
+            },
+            "mode": "test",
+            "metadata": None
+        }
+        preproceed_data, _ = self.preprocess(res, None)
+        example = collate_kitti([data])
 
-        # TODO: summarize example to input to model and get the bbox to publish
+        with torch.no_grad():
+            # outputs: predicted results in lidar coord.
+            outputs = self.model(examp, return_loss=False, rescale=True)
+
+        print(outputs)
 
 
 ## The code below is "ported" from

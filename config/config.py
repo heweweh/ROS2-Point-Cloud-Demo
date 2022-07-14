@@ -198,6 +198,11 @@ test_pipeline = [
 ]
 training_pipeline = test_pipeline if my_paras['eval_training_set'] else train_pipeline
 
+online_execute_pipeline = [
+    dict(type="Voxelization", cfg=voxel_generator),
+    dict(type="AssignTarget", cfg=train_cfg["assigner"]),
+    dict(type="Reformat"),
+]
 
 data_root = data_root_prefix + "/KITTI"
 train_anno = data_root_prefix + "/KITTI/kitti_infos_" + my_paras['data_mode'] + ".pkl"
