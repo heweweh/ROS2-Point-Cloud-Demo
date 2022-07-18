@@ -24,9 +24,9 @@ class PCDListener(Node):
 
         config_dir = os.path.join(get_package_share_directory(
             'pcd_demo'), 'config', 'config.py')
-        self.cfg = torchie.Config.fromfile(config_dir)
+        cfg = torchie.Config.fromfile(config_dir)
 
-        self.preprocess = Compose(self.cfg.online_execute_pipeline)
+        self.preprocess = Compose(cfg.online_execute_pipeline)
         checkpoint_path = os.path.join(get_package_share_directory(
             'pcd_demo'), 'checkpoint', 'se-ssd-model.pth')
         model_ = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
@@ -51,7 +51,7 @@ class PCDListener(Node):
         # the ROS1 package.
         # https://github.com/ros/common_msgs/blob/noetic-devel/sensor_msgs/src/sensor_msgs/point_cloud2.py
 
-        pcd_as_numpy_array = np.array(list(read_points(msg)))
+        pcd_as_numpy_array = np.array(list(read_points(msg)), dtype=np.float32)
         res = {
             "lidar": {
                 "type": "lidar",
@@ -62,11 +62,11 @@ class PCDListener(Node):
             "metadata": None
         }
         preproceed_data, _ = self.preprocess(res, None)
-        example = collate_kitti([data])
+        example = collate_kitti([preproceed_data])
 
         with torch.no_grad():
             # outputs: predicted results in lidar coord.
-            outputs = self.model(examp, return_loss=False, rescale=True)
+            outputs = self.model(example, return_loss=False, rescale=True)
 
         print(outputs)
 
