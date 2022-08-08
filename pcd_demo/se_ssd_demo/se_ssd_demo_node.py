@@ -92,7 +92,7 @@ class PCDListener(Node):
         self.publish_bboxes(msg,
                             zip(scores[filters].astype(float),
                             bboxes[filters].astype(float),
-                            label_preds[filters].astype(int)))
+                            label_preds[filters].astype(np.uint8)))
 
 
     def publish_bboxes(self, msg, lst):
@@ -114,7 +114,7 @@ class PCDListener(Node):
             bbox.orientation.w = q[3]
             bbox.variance = [0., 0., 0., 0., 0., 0., 0., 0.]
             bbox.value = pscore
-            bbox.vehicle_label = 1
+            bbox.vehicle_label = plabel+1
             bbox.class_likelihood = pscore
             bboxarr.boxes.append(bbox)
         self.bbox_publisher.publish(bboxarr)
