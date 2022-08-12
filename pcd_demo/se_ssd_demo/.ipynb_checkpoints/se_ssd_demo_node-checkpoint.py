@@ -4,6 +4,7 @@ import os
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
+from tf_transformations import quaternion_from_euler
 import sensor_msgs.msg as sensor_msgs
 import numpy as np
 from autoware_auto_perception_msgs.msg import BoundingBoxArray
@@ -45,8 +46,8 @@ class PCDListener(Node):
             10                          # QoS
         )
 
-        self.bbox_publisher = self.create_publisher(BoundingBoxArray, 
-                                                    'pcd_bbox_out', 
+        self.bbox_publisher = self.create_publisher(BoundingBoxArray,
+                                                    'pcd_bbox_out',
                                                     QoSProfile(
                                                         depth=1,
                                                         reliability=QoSReliabilityPolicy.RELIABLE,
@@ -63,6 +64,7 @@ class PCDListener(Node):
         # https://github.com/ros/common_msgs/blob/noetic-devel/sensor_msgs/src/sensor_msgs/point_cloud2.py
 
         pcd_as_numpy_array = np.array(list(read_points(msg)), dtype=np.float32)
+        pcd_as_numpy_array -= np.array([0.0, 0.0, 1.5, 0.0]) # adjust z-axis for model range
         res = {
             "lidar": {
                 "type": "lidar",
@@ -73,7 +75,7 @@ class PCDListener(Node):
             "metadata": None
         }
         preproceed_data, _ = self.preprocess(res, None)
-        example = collate_kitti([preproceed_data])
+        example = example_to_device(collate_kitti([preproceed_data]), device=torch.device('cuda'))
 
         with torch.no_grad():
             # outputs: predicted results in lidar coord.
@@ -83,15 +85,15 @@ class PCDListener(Node):
         bboxes = output['box3d_lidar'].cpu().numpy()
         scores = output['scores'].cpu().numpy()
         label_preds = output['label_preds'].cpu().numpy()
-        
-        temp_index = np.argsort(-scores)
-        print(f"scores: {scores[temp_index]} bboxes: {bboxes[temp_index]}")
 
-        filters = scores > 0.25
+        temp_index = np.argsort(-scores)
+        #print(f"scores: {scores[temp_index]} bboxes: {bboxes[temp_index]}")
+
+        filters = scores > 0 #  0.2
         self.publish_bboxes(msg,
                             zip(scores[filters].astype(float),
                             bboxes[filters].astype(float),
-                            label_preds[filters].astype(int)))
+                            label_preds[filters].astype(np.uint8)))
 
 
     def publish_bboxes(self, msg, lst):
@@ -106,9 +108,14 @@ class PCDListener(Node):
             bbox.size.x = pbbox[3]
             bbox.size.y = pbbox[4]
             bbox.size.z = pbbox[5]
+            q = quaternion_from_euler(0, 0, pbbox[6])  # prevent the data from being overwritten
+            bbox.orientation.x = q[0]
+            bbox.orientation.y = q[1]
+            bbox.orientation.z = q[2]
+            bbox.orientation.w = q[3]
             bbox.variance = [0., 0., 0., 0., 0., 0., 0., 0.]
             bbox.value = pscore
-            bbox.vehicle_label = 1
+            bbox.vehicle_label = plabel+1
             bbox.class_likelihood = pscore
             bboxarr.boxes.append(bbox)
         self.bbox_publisher.publish(bboxarr)

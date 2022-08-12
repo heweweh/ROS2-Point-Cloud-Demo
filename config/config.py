@@ -10,7 +10,11 @@ data_root_prefix = "/home/liyue/workspace/datasets"
 # norm_cfg = dict(type='SyncBN', eps=1e-3, momentum=0.01)
 norm_cfg = None
 
-tasks = [dict(num_class=1, class_names=["Car"],),]
+tasks = [
+    dict(num_class=1, class_names=["Car"]),
+    dict(num_class=1, class_names=["Pedestrian"]),
+    dict(num_class=1, class_names=["Cyclist"]),
+]
 
 class_names = list(itertools.chain(*[t["class_names"] for t in tasks]))
 
@@ -79,6 +83,7 @@ model = dict(
     ),
 )
 
+
 target_assigner = dict(
     type="iou",
     anchor_generators=[
@@ -90,6 +95,24 @@ target_assigner = dict(
             matched_threshold=0.6,
             unmatched_threshold=0.45,
             class_name="Car",
+        ),
+        dict(
+            type="anchor_generator_range",
+            sizes=[0.6, 0.8, 1.73],
+            anchor_ranges=[0, -40.0, -0.6, 70.4, 40.0, -0.6],
+            rotations=[0, 1.57],
+            matched_threshold=0.4,
+            unmatched_threshold=0.2,
+            class_name="Pedestrian",
+        ),
+        dict(
+            type="anchor_generator_range",
+            sizes=[0.6, 1.76, 1.73],
+            anchor_ranges=[0, -40.0, -0.6, 70.4, 40.0, -0.6],
+            rotations=[0, 1.57],
+            matched_threshold=0.4,
+            unmatched_threshold=0.2,
+            class_name="Cyclist",
         ),
     ],
     sample_positive_fraction=-1,
@@ -104,7 +127,7 @@ assigner = dict(
     target_assigner=target_assigner,
     out_size_factor=8,
     debug=False,
-    enable_similar_type=True,
+    enable_similar_type=False,
 )
 
 
@@ -260,26 +283,26 @@ data = dict(
 )
 
 # for cia optimizer
-optimizer = dict(type="adam", amsgrad=0.0, wd=0.01, fixed_wd=True, moving_average=False,)
+optimizer = dict(type="Adam", lr=3e-4)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
-lr_config = dict(type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,)  # learning policy in training hooks
-
-
+#lr_config = dict(type="CosineAnnealingWarmRestarts", T_0=2, T_mult=2, eta_min=0, verbose=True, last_epoch=-1, )  # learning policy in training hooks
+lr_config = dict(type="ExponentialLR", gamma=0.75, last_epoch=-1, )  # learning policy in training hooks
 
 checkpoint_config = dict(interval=1)
-log_config = dict(interval=10,hooks=[dict(type="TextLoggerHook"),],) # dict(type='TensorboardLoggerHook')
+log_config = dict(interval=10,hooks=[dict(type='TensorboardLoggerHook'),],)  # dict(interval=10,hooks=[dict(type="TextLoggerHook"),],)
 
 # runtime settings
-total_epochs = 60
+total_epochs = 128
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = "/home/liyue/workspace/adas/SE-SSD/" + TAG
+work_dir = "/home/liyue/workspace/adas/SE-SSD/current/"
 # load_from: "path of pre-trained checkpoint to initialize both teacher & student, e.g., CIA-SSD pre-trained model"
 # load_from = "/xxx/xxx/xxx/epoch_60.pth"
-load_from = "/mnt/proj50/zhengwu/saved_model/KITTI/proj52/megvii/second/pre_trained_model_2/epoch_60.pth"
+load_from = "/home/liyue/workspace/adas/SE-SSD/latest/latest_ema.pth"
+#load_from = None
 resume_from = None
-workflow = [("train", 60), ("val", 1)] if my_paras['enable_ssl'] else [("train", 60), ("val", 1)]
+workflow = [("train", 64), ("val", 1)] if my_paras['enable_ssl'] else [("train", 60), ("val", 1)]
 save_file = False if TAG == "debug" or TAG == "exp_debug" or Path(work_dir, "Det3D").is_dir() else True
 
 
