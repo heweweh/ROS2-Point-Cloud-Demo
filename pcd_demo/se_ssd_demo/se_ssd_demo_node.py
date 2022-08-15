@@ -77,6 +77,9 @@ class PCDListener(Node):
 
         structed_array = rnp.numpify(msg)
         structed_array['z'] -= REFERENCE_LIDAR_HEIGHT
+        structed_array['intensity'] = (1.0 - structed_array['intensity']) * 127
+
+        print("intensity:", structed_array['intensity'].max(), structed_array['intensity'].mean(), structed_array['intensity'].min())
         unstructed_array = structed_array.view('f4').reshape(-1,4)
 
         pcd_c_tw = rnp.msgify(sensor_msgs.PointCloud2, structed_array)
@@ -104,16 +107,16 @@ class PCDListener(Node):
         scores = output['scores'].cpu().numpy()
         label_preds = output['label_preds'].cpu().numpy()
 
-        temp_index = np.argsort(-scores)
-        #print(f"scores: {scores[temp_index]} bboxes: {bboxes[temp_index]}")
+        #print(bboxes, scores, label_preds)
 
-        filters = scores > 0.35
+        need_scores = np.array([0.3, 0.05, 0.05])
+        filters = scores > need_scores[label_preds]
+
         filtered_bboxes = bboxes[filters]
-        filtered_bboxes[:,3] += REFERENCE_LIDAR_HEIGHT # adjust z of bounding box
+        filtered_bboxes[:,2] += REFERENCE_LIDAR_HEIGHT # adjust z of bounding box
         filtered_scores = scores[filters]
         filtered_labels = label_preds[filters]
 
-        print(filtered_bboxes, filtered_scores, filtered_labels)
 
         self.publish_bboxes(msg,
                             zip(filtered_scores.astype(float),
@@ -133,7 +136,10 @@ class PCDListener(Node):
             bbox.size.x = pbbox[3]
             bbox.size.y = pbbox[4]
             bbox.size.z = pbbox[5]
-            q = quaternion_from_euler(0, 0, pbbox[6])  # prevent the data from being overwritten
+
+            # prevent the data from being overwritten
+            # the direction output by model is y-axis algined (which means yaw = 0 is the y-axis)
+            q = quaternion_from_euler(0, 0, pbbox[6] - np.pi/2)
             bbox.orientation.x = q[0]
             bbox.orientation.y = q[1]
             bbox.orientation.z = q[2]
